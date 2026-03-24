@@ -1,0 +1,25 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>UI Flow Recorder</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <div class="container">
+      <h1>UI Flow Recorder</h1>
+      <div id="status">Status: <span id="statusText">Idle</span></div>
+      <div id="runInfo">Run: <span id="runId">—</span> | Steps: <span id="stepCount">0</span></div>
+
+      <div class="actions">
+        <button id="toggleBtn">Start Recording</button>
+        <button id="exportBtn">Stop & Export</button>
+      </div>
+
+      <small class="hint">Recording captures clicks, inputs, navigations + screenshots.</small>
+    </div>
+
+    <!-- IMPORTANT: external file, no inline JS -->
+    <script src="popup.js"></script>
+  </body>
+</html>

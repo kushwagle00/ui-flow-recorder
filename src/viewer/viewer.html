@@ -1,0 +1,58 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>UI Flow Viewer</title>
+    <link rel="stylesheet" href="viewer.css" />
+    <!-- Option A: put script in head with defer so it runs after DOM is parsed -->
+    <script src="viewer.js" defer></script>
+  </head>
+  <body>
+    <header class="header">
+      <h1>UI Flow Viewer</h1>
+      <div class="toolbar">
+        <button id="exportBtn">Export JSON</button>
+        <button id="saveBtn" class="primary">Save Changes</button>
+      </div>
+    </header>
+
+    <main class="layout">
+      <aside class="steps">
+        <div class="steps-header">
+          <span>Steps</span>
+          <span id="count" class="count">0</span>
+        </div>
+        <ul id="stepList" class="step-list"></ul>
+      </aside>
+
+      <section class="detail">
+        <div class="detail-top">
+          <div class="img-wrap">
+            <img id="screenshot" alt="Step screenshot" />
+            <!-- Pointer overlay -->
+            <div id="pointer" class="pointer" hidden></div>
+          </div>
+          <div class="meta">
+            <div><strong>Type:</strong> <span id="stepType">—</span></div>
+            <div><strong>URL:</strong> <span id="stepUrl" class="mono">—</span></div>
+            <div><strong>Timestamp:</strong> <span id="stepTime">—</span></div>
+            <div><strong>Viewport:</strong> <span id="viewport">—</span></div>
+          </div>
+        </div>
+
+        <div class="selectors">
+          <h2>Selectors</h2>
+          <form id="selectorForm" class="selector-form"></form>
+          <small class="hint">
+            Pick a primary selector. Alternatives remain as fallbacks.
+          </small>
+        </div>
+
+        <div class="nav">
+          <button id="prevBtn">← Prev</button>
+          <button id="nextBtn">Next →</button>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>

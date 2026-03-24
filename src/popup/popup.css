@@ -1,0 +1,39 @@
+body {
+  font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+  margin: 0;
+  padding: 12px;
+  width: 320px;
+}
+
+h1 {
+  font-size: 16px;
+  margin: 0 0 8px;
+}
+
+#status, #runInfo {
+  margin: 6px 0;
+}
+
+.actions {
+  margin-top: 10px;
+  display: flex;
+  gap: 8px;
+}
+
+button {
+  padding: 6px 10px;
+  border: 1px solid #ccc;
+  background: #f7f7f7;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+button:hover {
+  background: #eee;
+}
+
+.hint {
+  display: block;
+  margin-top: 10px;
+  color: #666;
+}

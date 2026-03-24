@@ -1,0 +1,23 @@
+{
+  "name": "ui-flow-recorder",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  
+
+"scripts": {
+    "build:js": "esbuild src/background/background.ts --bundle --outfile=dist/background.js --platform=browser --format=esm --sourcemap && esbuild src/content/content.ts --bundle --outfile=dist/content.js --platform=browser --format=iife --sourcemap && esbuild src/popup/popup.ts --bundle --outfile=dist/popup.js --platform=browser --format=iife --sourcemap && esbuild src/viewer/viewer.ts --bundle --outfile=dist/viewer.js --platform=browser --format=iife --sourcemap",
+    "build:static": "node scripts/copy-static.js",
+    "build": "npm run build:js && npm run build:static"
+  },
+
+"devDependencies": {
+  "@types/chrome": "^0.0.268",
+  "concurrently": "^9.0.0",
+  "cpx2": "^4.2.3",
+  "esbuild": "^0.24.0",
+  "rimraf": "^6.0.1",
+  "typescript": "^5.6.3"
+}
+
+}
