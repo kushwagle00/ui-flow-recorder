@@ -32,6 +32,7 @@ export interface Step {
 
 export interface Run {
   runId: string;
+  tabId?: number;
   startedAt: number;
   stoppedAt?: number;
   steps: Step[];

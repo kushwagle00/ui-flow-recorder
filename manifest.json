@@ -3,7 +3,13 @@
   "name": "UI Flow Recorder",
   "version": "0.1.0",
   "description": "Record UI interactions with screenshots and selectors.",
-  "permissions": ["storage", "tabs", "activeTab", "scripting"],
+  "permissions": [
+    "storage",
+    "tabs",
+    "activeTab",
+    "scripting",
+    "unlimitedStorage"
+  ],
   "background": {
     "service_worker": "background.js",
     "type": "module"
@@ -13,9 +19,16 @@
   },
   "content_scripts": [
     {
-      "matches": ["<all_urls>"],
-      "js": ["content.js"],
+      "matches": [
+        "<all_urls>"
+      ],
+      "js": [
+        "content.js"
+      ],
       "run_at": "document_start"
     }
+  ],
+  "host_permissions": [
+    "<all_urls>"
   ]
 }

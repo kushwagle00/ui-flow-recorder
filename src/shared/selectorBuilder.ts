@@ -63,8 +63,16 @@ export function buildSelectors(target: Element): { primary: string; alternatives
 
   alts.push(`xpath=${buildXPath(el)}`);
 
-  return {
-    primary: alts[0] || buildXPath(el),
-    alternatives: alts.slice(1)
-  };
+  // Prefer a unique CSS selector; text/XPath alternatives are explicitly labeled.
+  const path: string[] = [];
+  let node: Element | null = el;
+  while (node) {
+    const siblings: Element[] = node.parentElement ? Array.from(node.parentElement.children).filter(s => s.tagName === node!.tagName) : [node];
+    path.unshift(`${node.tagName.toLowerCase()}:nth-of-type(${siblings.indexOf(node) + 1})`);
+    node = node.parentElement;
+  }
+  const unique = alts.find(s => {
+    try { return document.querySelectorAll(s).length === 1 && document.querySelector(s) === el; } catch { return false; }
+  }) ?? path.join(" > ");
+  return { primary: unique, alternatives: [...new Set(alts)].filter(s => s !== unique) };
 }

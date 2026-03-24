@@ -1,244 +1,99 @@
-
-// src/background/background.ts
-
+import { validateRun } from "@shared/validation";
 import type { MsgFromContent, MsgFromPopup } from "@shared/messaging";
 import type { Step } from "@shared/types";
-import {
-  getCurrentRun, setCurrentRun, pushStep, finalizeRun,
-  startNewRun, getRecordingFlag, setRecordingFlag
-} from "@shared/storage";
+import { getCurrentRun, getRuns, setRuns, pushStep, finalizeRun, startNewRun, getRecordingFlag, setRecordingFlag } from "@shared/storage";
 
-
-/**
- * Recording toggle lives in background (service worker)
- */
-let isRecording = false;
-
-/**
- * Helpers: Chrome callback APIs → Promises (MV3-safe)
- * NOTE: When windowId is undefined, call the overload WITHOUT a first argument.
- */
-
-function captureVisibleTab(windowId?: number): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const callback = (dataUrl?: string) => {
-      if (chrome.runtime.lastError || !dataUrl) {
-        reject(chrome.runtime.lastError);
-      } else {
-        resolve(dataUrl);
-      }
-    };
-
-    const options: chrome.tabs.CaptureVisibleTabOptions = { format: "png" };
-
-    if (typeof windowId === "number") {
-      // Overload: captureVisibleTab(windowId: number, options, callback)
-      chrome.tabs.captureVisibleTab(windowId, options, callback);
+// Serialize all storage mutations, including viewer writes and Stop, so in-flight
+// captures cannot overwrite events or append to a subsequently started run.
+let queue: Promise<unknown> = Promise.resolve();
+function serial<T>(task: () => Promise<T>): Promise<T> {
+  const result = queue.then(task);
+  queue = result.catch(() => undefined);
+  return result;
+}
+let lastCapture = 0;
+let lastId = Date.now();
+const nextId = () => lastId = Math.max(Date.now(), lastId + 1);
+async function status() {
+  const run = await getCurrentRun();
+  return { kind: "STATUS", isRecording: await getRecordingFlag(), runId: run?.runId, stepCount: run?.steps.length ?? 0 };
+}
+async function handle(msg: any, sender: chrome.runtime.MessageSender) {
+  if (!msg || typeof msg.kind !== "string") throw new Error("Invalid message");
+  const fromPage = !sender.url?.startsWith(chrome.runtime.getURL(""));
+  if (fromPage && !["RECORD_STEP", "NAVIGATION"].includes(msg.kind)) throw new Error("Unsupported page message");
+  if (msg.kind === "GET_STATUS") return status();
+  if (msg.kind === "START_RECORDING") {
+    const tab = await chrome.tabs.get(msg.tabId);
+    if (!tab.id || !/^https?:/.test(tab.url ?? "")) throw new Error("Open a regular HTTP or HTTPS page before recording.");
+    if (!await getRecordingFlag()) {
+      // Recover an interrupted finalization before replacing the current run.
+      if (await getCurrentRun()) await finalizeRun();
+      await startNewRun(tab.id);
+      await setRecordingFlag(true);
+      await pushStep({ stepId: nextId(), timestamp: Date.now(), type: "navigation", url: tab.url! });
+    }
+    return status();
+  }
+  if (msg.kind === "STOP_RECORDING") {
+    await finalizeRun();
+    await setRecordingFlag(false);
+    return status();
+  }
+  if (msg.kind === "GET_CURRENT_RUN") {
+    const run = await getCurrentRun();
+    return { kind: "CURRENT_RUN", runId: run?.runId, steps: run?.steps };
+  }
+  if (["SAVE_RUN", "IMPORT_RUN", "DELETE_RUN"].includes(msg.kind)) {
+    const active = await getCurrentRun();
+    const id = msg.runId ?? msg.run?.runId;
+    if (active?.runId === id) throw new Error("Stop recording before editing or deleting this run.");
+    const runs = await getRuns();
+    if (msg.kind === "DELETE_RUN") await setRuns(runs.filter(r => r.runId !== id));
+    else if (msg.kind === "IMPORT_RUN") {
+      validateRun(msg.run);
+      await setRuns([...runs, { ...msg.run, runId: crypto.randomUUID(), tabId: undefined, stoppedAt: msg.run.stoppedAt ?? Date.now() }]);
     } else {
-      // Overload: captureVisibleTab(options, callback)  ← NO first arg at all
-      chrome.tabs.captureVisibleTab(options, callback);
+      const index = runs.findIndex(r => r.runId === id);
+      if (index < 0) throw new Error("Recording no longer exists. Reload the viewer.");
+      // Apply only the selected step's selector choice to the latest saved run.
+      const step = runs[index].steps.find(s => s.stepId === msg.stepId);
+      if (!step?.selectors || ![step.selectors.primary, ...step.selectors.alternatives].includes(msg.primary)) throw new Error("Invalid selector choice");
+      step.selectors = { primary: msg.primary, alternatives: [...new Set([step.selectors.primary, ...step.selectors.alternatives])].filter(v => v !== msg.primary) };
+      await setRuns(runs);
     }
-  });
+    return { kind: "OK" };
+  }
+  if (!await getRecordingFlag()) return { kind: "IGNORED" };
+  const run = await getCurrentRun();
+  if (!run || sender.tab?.id !== run.tabId) return { kind: "IGNORED" };
+  if (msg.kind === "RECORD_STEP") {
+    const data = (msg as Extract<MsgFromContent, {kind: "RECORD_STEP"}>).step;
+    if (!data || !["click", "input"].includes(data.type)) throw new Error("Invalid step");
+    const tab = await chrome.tabs.get(run.tabId!);
+    let screenshotDataUrl: string | undefined;
+    // captureVisibleTab captures the active tab, never capture a different tab.
+    if (tab.active && !data.sensitive && Date.now() - lastCapture >= 600) {
+      lastCapture = Date.now();
+      try { screenshotDataUrl = await chrome.tabs.captureVisibleTab(tab.windowId, { format: "jpeg", quality: 65 }); } catch { /* An event remains useful without an image. */ }
+    }
+    await pushStep({ stepId: nextId(), timestamp: Date.now(), type: data.type, url: data.url ?? sender.tab?.url ?? "", element: data.element, selectors: data.selectors, value: data.value, visualContext: { screenshotDataUrl, viewport: data.viewport, pointer: data.pointer ? { ...data.pointer, units: "viewport-px" } : undefined } });
+    return { kind: "OK" };
+  }
+  return { kind: "IGNORED" };
 }
-
-async function getTabSize(tabId?: number): Promise<{ width: number; height: number }> {
-  if (typeof tabId !== "number") return { width: 0, height: 0 };
-  return new Promise((resolve) => {
-    chrome.tabs.get(tabId, (tab) => {
-      if (chrome.runtime.lastError || !tab) {
-        resolve({ width: 0, height: 0 });
-      } else {
-        // width/height aren't consistently typed on chrome.tabs.Tab in @types/chrome for MV3
-        resolve({
-          width: (tab as any).width ?? 0,
-          height: (tab as any).height ?? 0
-        });
-      }
-    });
-  });
-}
-
-/**
- * Step IDs: stable increasing number
- */
-let lastStepId = Date.now();
-function nextStepId(): number {
-  const now = Date.now();
-  if (now <= lastStepId) lastStepId += 1;
-  else lastStepId = now;
-  return lastStepId;
-}
-
-/**
- * Lifecycle: initialize flags
- */
-
-async function hydrateRecordingFlag() {
-  // On service worker startup, always reset to false to avoid stale state
-  // from a crash or unexpected termination
-  isRecording = false;
-  await setRecordingFlag(false);
-}
-
-// Ensure state is clean on startup
-hydrateRecordingFlag();
-
-
-/**
- * Core message router (popup + content)
- */
-chrome.runtime.onMessage.addListener((msg: MsgFromContent | MsgFromPopup, sender, sendResponse) => {
-  (async () => {
-    // ✅ Guard: ensure msg has a "kind"
-    if (!(msg && typeof msg === "object" && "kind" in msg)) {
-      return;
-    }
-
-    // ─────────────────────────────────────────────────────────────
-    // Popup → Status
-    // ─────────────────────────────────────────────────────────────
-    const popupMsg = msg as MsgFromPopup;
-
-    if (popupMsg.kind === "GET_STATUS") {
-      const run = await getCurrentRun();
-      sendResponse({
-        kind: "STATUS",
-        isRecording,
-        runId: run?.runId,
-        stepCount: run?.steps.length ?? 0
-      });
-      return;
-    }
-
-    if (popupMsg.kind === "START_RECORDING") {
-      if (!isRecording) {
-        isRecording = true;
-        await setRecordingFlag(true);
-        await startNewRun();
-      }
-      const run = await getCurrentRun();
-      sendResponse({ kind: "STATUS", isRecording, runId: run?.runId, stepCount: run?.steps.length ?? 0 });
-      return;
-    }
-
-    if (popupMsg.kind === "STOP_RECORDING") {
-      if (isRecording) {
-        isRecording = false;
-        await setRecordingFlag(false);
-        await finalizeRun();
-      }
-      const run = await getCurrentRun();
-      sendResponse({ kind: "STATUS", isRecording, runId: run?.runId, stepCount: run?.steps.length ?? 0 });
-      return;
-    }
-
-    if (popupMsg.kind === "GET_CURRENT_RUN") {
-      const run = await getCurrentRun();
-      sendResponse({
-        kind: "CURRENT_RUN",
-        runId: run?.runId,
-        steps: run?.steps
-      });
-      return;
-    }
-
-    // ─────────────────────────────────────────────────────────────
-    // Content → Record an action (click/input) with screenshot
-    // ─────────────────────────────────────────────────────────────
-    if (msg.kind === "RECORD_STEP") {
-      if (!isRecording) {
-        sendResponse(undefined);
-        return;
-      }
-
-      const stepBase = (msg as any).step as {
-        type: Step["type"];
-        element?: Step["element"];
-        selectors?: Step["selectors"];
-        value?: string;
-        pointer?: { x: number; y: number };
-      };
-
-      const tab = sender.tab;
-      const windowId = tab?.windowId; // may be undefined
-      const tabId = tab?.id;          // may be undefined
-
-      let screenshotDataUrl: string | undefined;
-      try {
-        // Some pages/windows disallow capture (chrome://, extensions, PDF viewer, Web Store)
-        screenshotDataUrl = await captureVisibleTab(windowId);
-      } catch {
-        // Keep undefined if capture fails
-      }
-
-      const { width, height } = await getTabSize(tabId);
-
-      const step: Step = {
-        stepId: nextStepId(),
-        timestamp: Date.now(),
-        type: stepBase.type,
-        url: tab?.url || "",
-        element: stepBase.element,
-        selectors: stepBase.selectors,
-        value: stepBase.value,
-        visualContext: {
-          screenshotDataUrl,
-          viewport: {
-            width,
-            height,
-            devicePixelRatio: 1 // You can improve this via injected script later
-          },
-          pointer: stepBase.pointer
-            ? { x: stepBase.pointer.x, y: stepBase.pointer.y, units: "viewport-px" }
-            : undefined
-        }
-      };
-
-      await pushStep(step);
-      sendResponse(undefined);
-      return;
-    }
-
-    // ─────────────────────────────────────────────────────────────
-    // Explicit NAVIGATION message (optional; we also capture via tabs.onUpdated)
-    // ─────────────────────────────────────────────────────────────
-    if (msg.kind === "NAVIGATION") {
-      if (!isRecording) {
-        sendResponse(undefined);
-        return;
-      }
-      const navUrl = (msg as any).url as string;
-      const step: Step = {
-        stepId: nextStepId(),
-        timestamp: Date.now(),
-        type: "navigation",
-        url: navUrl
-      };
-      await pushStep(step);
-      sendResponse(undefined);
-      return;
-    }
-  })();
-
-  // Important: keep the message channel open for async sendResponse
+chrome.runtime.onMessage.addListener((msg, sender, respond) => {
+  serial(() => handle(msg, sender)).then(respond, error => respond({ kind: "ERROR", message: String(error?.message ?? error) }));
   return true;
 });
-
-/**
- * Background-level navigation capture:
- * When a tab finishes loading and we're recording, add a navigation step.
- */
-chrome.tabs.onUpdated.addListener(async (tabId, info, tab) => {
-  if (!isRecording) return;
-  if (info.status === "complete" && tab.url) {
-    const step: Step = {
-      stepId: nextStepId(),
-      timestamp: Date.now(),
-      type: "navigation",
-      url: tab.url
-    };
-    await pushStep(step);
-  }
+chrome.tabs.onUpdated.addListener((tabId, info) => {
+  if (!info.url) return;
+  serial(async () => {
+    const run = await getCurrentRun();
+    if (!await getRecordingFlag() || run?.tabId !== tabId) return;
+    await pushStep({ stepId: nextId(), timestamp: Date.now(), type: "navigation", url: info.url! });
+  }).catch(console.error);
 });
-
-export {};
+chrome.tabs.onRemoved.addListener(tabId => {
+  serial(async () => { if ((await getCurrentRun())?.tabId === tabId) { await finalizeRun(); await setRecordingFlag(false); } }).catch(console.error);
+});

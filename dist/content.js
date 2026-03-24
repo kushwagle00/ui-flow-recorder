@@ -52,49 +52,57 @@
       alts.push(`text="${text.replace(/\s+/g, " ")}"`);
     }
     alts.push(`xpath=${buildXPath(el)}`);
-    return {
-      primary: alts[0] || buildXPath(el),
-      alternatives: alts.slice(1)
-    };
+    const path = [];
+    let node = el;
+    while (node) {
+      const siblings = node.parentElement ? Array.from(node.parentElement.children).filter((s) => s.tagName === node.tagName) : [node];
+      path.unshift(`${node.tagName.toLowerCase()}:nth-of-type(${siblings.indexOf(node) + 1})`);
+      node = node.parentElement;
+    }
+    const unique = alts.find((s) => {
+      try {
+        return document.querySelectorAll(s).length === 1 && document.querySelector(s) === el;
+      } catch {
+        return false;
+      }
+    }) ?? path.join(" > ");
+    return { primary: unique, alternatives: [...new Set(alts)].filter((s) => s !== unique) };
   }
 
   // src/content/content.ts
-  function safeSend(msg) {
-    try {
-      if (!chrome?.runtime?.id) return;
-      chrome.runtime.sendMessage(msg, () => {
-        void chrome.runtime.lastError;
-      });
-    } catch {
-    }
+  var scope = globalThis;
+  if (!scope.__uiFlowInstalled) {
+    let record2 = function(event) {
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+      const input = target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement;
+      if (event.type === "change" && !input) return;
+      const sensitive = target.matches('input[type="password"], input[type="hidden"], input[type="file"], [autocomplete="one-time-code"], [autocomplete^="cc-"]');
+      const secretOnPage = !!document.querySelector('input[type="password"], [autocomplete="one-time-code"], [autocomplete^="cc-"]');
+      let value = input ? target.value : void 0;
+      if (target instanceof HTMLInputElement && ["checkbox", "radio"].includes(target.type)) value = String(target.checked);
+      try {
+        if (!chrome.runtime?.id) return;
+        chrome.runtime.sendMessage({ kind: "RECORD_STEP", step: {
+          type: event.type === "click" ? "click" : "input",
+          url: location.href,
+          element: getElementSnapshot(target),
+          selectors: buildSelectors(target),
+          value: sensitive ? "[REDACTED]" : event.type === "change" ? value : void 0,
+          sensitive: sensitive || secretOnPage,
+          viewport: { width: innerWidth, height: innerHeight, devicePixelRatio },
+          pointer: event instanceof MouseEvent ? { x: event.clientX, y: event.clientY } : void 0
+        } }, () => {
+          void chrome.runtime.lastError;
+        });
+      } catch {
+      }
+    };
+    record = record2;
+    scope.__uiFlowInstalled = true;
+    document.addEventListener("click", record2, true);
+    document.addEventListener("change", record2, true);
   }
-  document.addEventListener("click", (e) => {
-    const target = e.target;
-    if (!target) return;
-    const { primary, alternatives } = buildSelectors(target);
-    safeSend({
-      kind: "RECORD_STEP",
-      step: {
-        type: "click",
-        element: getElementSnapshot(target),
-        selectors: { primary, alternatives },
-        pointer: { x: e.clientX, y: e.clientY }
-      }
-    });
-  }, true);
-  document.addEventListener("change", (e) => {
-    const target = e.target;
-    if (!target) return;
-    const { primary, alternatives } = buildSelectors(target);
-    safeSend({
-      kind: "RECORD_STEP",
-      step: {
-        type: "input",
-        element: getElementSnapshot(target),
-        selectors: { primary, alternatives },
-        value: target.value
-      }
-    });
-  }, true);
+  var record;
 })();
 //# sourceMappingURL=content.js.map

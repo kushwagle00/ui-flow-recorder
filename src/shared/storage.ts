@@ -44,9 +44,10 @@ export async function deleteRun(runIdToDelete: string): Promise<void> {
 }
 
 // Always create a fresh run (new runId, empty steps)
-export async function startNewRun(): Promise<Run> {
+export async function startNewRun(tabId?: number): Promise<Run> {
   const run: Run = {
     runId: crypto.randomUUID(),
+    tabId,
     startedAt: Date.now(),
     steps: []
   };
@@ -69,8 +70,10 @@ export async function finalizeRun(): Promise<Run | null> {
   run.stoppedAt = Date.now();
 
   const runs = await getRuns();
-  runs.push(run);
-  await setRuns(runs);
+  const existing = runs.findIndex(r => r.runId === run.runId);
+  if (existing >= 0) runs[existing] = run;
+  else runs.push(run);
+  await chrome.storage.local.set({ runs, isRecording: false });
 
   // Clear current run so the next Start creates a new runId
   await setCurrentRun(null);
