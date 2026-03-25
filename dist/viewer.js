@@ -7,24 +7,25 @@
     const obj = await chrome.storage.local.get([CURRENT_RUN_KEY]);
     return obj[CURRENT_RUN_KEY] ?? null;
   }
-  async function setCurrentRun(run2) {
-    if (run2) {
-      await chrome.storage.local.set({ [CURRENT_RUN_KEY]: run2 });
-    } else {
-      await chrome.storage.local.remove([CURRENT_RUN_KEY]);
-    }
-  }
   async function getRuns() {
     const obj = await chrome.storage.local.get([RUNS_KEY]);
     return obj[RUNS_KEY] ?? [];
   }
-  async function setRuns(runs2) {
-    await chrome.storage.local.set({ [RUNS_KEY]: runs2 });
-  }
-  async function deleteRun(runIdToDelete) {
-    const runs2 = await getRuns();
-    const filtered = runs2.filter((r) => r.runId !== runIdToDelete);
-    await setRuns(filtered);
+
+  // src/shared/validation.ts
+  function validateRun(value) {
+    const r = value;
+    if (!r || typeof r.runId !== "string" || !r.runId || !Number.isFinite(r.startedAt) || !Array.isArray(r.steps) || r.steps.length > 1e4) throw new Error("Invalid recording");
+    const ids = /* @__PURE__ */ new Set();
+    for (const s of r.steps) {
+      if (!s || !Number.isFinite(s.stepId) || ids.has(s.stepId) || !Number.isFinite(s.timestamp) || !["click", "input", "navigation"].includes(s.type) || typeof s.url !== "string") throw new Error("Invalid step");
+      ids.add(s.stepId);
+      if (s.selectors && (typeof s.selectors.primary !== "string" || !Array.isArray(s.selectors.alternatives) || s.selectors.alternatives.some((v) => typeof v !== "string"))) throw new Error("Invalid selectors");
+      const image = s.visualContext?.screenshotDataUrl;
+      if (image && (typeof image !== "string" || !/^data:image\/(png|jpeg);base64,[A-Za-z0-9+/=]+$/.test(image))) throw new Error("Invalid screenshot");
+      const viewport = s.visualContext?.viewport;
+      if (viewport && ![viewport.width, viewport.height].every((v) => Number.isFinite(v) && v > 0)) throw new Error("Invalid viewport");
+    }
   }
 
   // src/viewer/viewer.ts
@@ -62,7 +63,14 @@
   var isPlaying = false;
   var playbackInterval = null;
   var currentRunIdx = 0;
-  init().catch(console.error);
+  async function mutate(msg) {
+    const result = await chrome.runtime.sendMessage(msg);
+    if (!result || result.kind === "ERROR") throw new Error(result?.message ?? "Recorder unavailable");
+  }
+  function report(error) {
+    alert(error.message ?? String(error));
+  }
+  init().catch(report);
   async function init() {
     const currentRun = await getCurrentRun();
     const pastRuns = await getRuns();
@@ -76,15 +84,27 @@
     bindActions();
     const detail = document.querySelector(".detail");
     detail.appendChild(jsonArea);
-    if (runs.length > 0) {
-      selectRun(0);
-    }
+    selectRun(0);
   }
   function renderRunsList() {
     runsListEl.innerHTML = "";
+    if (!runs.length) {
+      const empty = document.createElement("li");
+      empty.textContent = "No recordings yet. Start from the extension popup, or import a JSON recording.";
+      empty.style.padding = "16px";
+      runsListEl.appendChild(empty);
+    }
     runs.forEach((r, idx) => {
       const li = document.createElement("li");
       li.className = "run-item";
+      li.tabIndex = 0;
+      li.setAttribute("role", "button");
+      li.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          selectRun(idx);
+        }
+      });
       li.dataset.index = String(idx);
       const runId = document.createElement("div");
       runId.className = "run-id";
@@ -105,6 +125,8 @@
     if (isPlaying) {
       onPlayPause();
     }
+    jsonArea.style.display = "none";
+    viewJsonBtn.textContent = "View JSON";
     currentRunIdx = idx;
     run = runs[idx] ?? null;
     currentIndex = 0;
@@ -113,6 +135,11 @@
       el.classList.toggle("active", i === idx);
     });
     renderList();
+    const hasSteps = !!run?.steps.length;
+    playBtn.disabled = !hasSteps;
+    exportBtn.disabled = viewJsonBtn.disabled = !run;
+    saveBtn.disabled = deleteBtn.disabled = !run || !run.stoppedAt;
+    prevBtn.disabled = nextBtn.disabled = !hasSteps;
     if (run && run.steps.length > 0) {
       selectIndex(0);
     } else {
@@ -120,7 +147,10 @@
       stepUrlEl.textContent = "\u2014";
       stepTimeEl.textContent = "\u2014";
       viewportEl.textContent = "\u2014";
-      screenshotEl.src = "";
+      screenshotEl.removeAttribute("src");
+      screenshotEl.hidden = true;
+      document.getElementById("imagePlaceholder").hidden = false;
+      document.getElementById("imagePlaceholder").textContent = "Select a recorded step to inspect it.";
       pointerEl.hidden = true;
       selectorForm.innerHTML = "";
     }
@@ -142,10 +172,10 @@
     viewJsonBtn.addEventListener("click", onViewJson);
     importBtn.addEventListener("click", onImportTrigger);
     importFileInput.addEventListener("change", onImportFile);
-    saveBtn.addEventListener("click", onSave);
+    saveBtn.addEventListener("click", () => onSave().catch(report));
     playBtn.addEventListener("click", onPlayStart);
     pausePlayBtn.addEventListener("click", onPlayPause);
-    deleteBtn.addEventListener("click", onDelete);
+    deleteBtn.addEventListener("click", () => onDelete().catch(report));
   }
   function renderList() {
     stepListEl.innerHTML = "";
@@ -154,6 +184,15 @@
     steps.forEach((s, i) => {
       const li = document.createElement("li");
       li.className = "step-item";
+      li.tabIndex = 0;
+      li.setAttribute("role", "button");
+      li.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onPlayPause();
+          selectIndex(i);
+        }
+      });
       li.dataset.index = String(i);
       const title = document.createElement("div");
       title.className = "title";
@@ -166,12 +205,17 @@
       ts.className = "mono";
       ts.textContent = new Date(s.timestamp).toLocaleString();
       li.append(title, primary, ts);
-      li.addEventListener("click", () => selectIndex(i));
+      li.addEventListener("click", () => {
+        onPlayPause();
+        selectIndex(i);
+      });
       stepListEl.appendChild(li);
     });
   }
   function selectIndex(i) {
     currentIndex = i;
+    prevBtn.disabled = i <= 0;
+    nextBtn.disabled = !run || i >= run.steps.length - 1;
     const items = stepListEl.querySelectorAll(".step-item");
     items.forEach((el, idx) => {
       el.classList.toggle("active", idx === i);
@@ -192,13 +236,13 @@
       viewportEl.textContent = "\u2014";
     }
     const dataUrl = step.visualContext?.screenshotDataUrl;
-    screenshotEl.src = dataUrl || "";
     pointerEl.hidden = true;
-    if (dataUrl) {
-      screenshotEl.onload = () => {
-        drawPointer(step);
-      };
-    }
+    screenshotEl.onload = () => drawPointer(step);
+    screenshotEl.hidden = !dataUrl;
+    document.getElementById("imagePlaceholder").hidden = !!dataUrl;
+    document.getElementById("imagePlaceholder").textContent = "No screenshot for this step. Event details are available below.";
+    if (dataUrl) screenshotEl.src = dataUrl;
+    else screenshotEl.removeAttribute("src");
     renderSelectors(step);
   }
   function drawPointer(step) {
@@ -214,10 +258,10 @@
     }
     const renderedWidth = img.clientWidth;
     const renderedHeight = img.clientHeight;
-    const sx = renderedWidth / img.naturalWidth;
-    const sy = renderedHeight / img.naturalHeight;
-    const x = pointer.x * sx;
-    const y = pointer.y * sy;
+    const sx = renderedWidth / (step.visualContext?.viewport?.width || img.naturalWidth);
+    const sy = renderedHeight / (step.visualContext?.viewport?.height || img.naturalHeight);
+    const x = img.offsetLeft + pointer.x * sx;
+    const y = img.offsetTop + pointer.y * sy;
     pointerEl.style.left = `${x}px`;
     pointerEl.style.top = `${y}px`;
     pointerEl.hidden = false;
@@ -236,7 +280,7 @@
       return;
     }
     all.forEach((value, idx) => {
-      const row = document.createElement("div");
+      const row = document.createElement("label");
       row.className = "selector-row";
       const input = document.createElement("input");
       input.type = "radio";
@@ -263,12 +307,7 @@
     existing.delete(primary);
     const alternatives = Array.from(existing);
     step.selectors = { primary, alternatives };
-    const runIdx = runs.indexOf(run);
-    if (runIdx === 0 && !(await getCurrentRun())?.runId) {
-      await setCurrentRun(run);
-    } else {
-      await setRuns(runs.slice(1));
-    }
+    await mutate({ kind: "SAVE_RUN", runId: run.runId, stepId: step.stepId, primary });
     const li = stepListEl.children[currentIndex];
     if (li) {
       const mono = li.querySelector(".mono");
@@ -295,13 +334,14 @@
     if (!input.files || !input.files[0]) return;
     try {
       const file = input.files[0];
+      if (file.size > 20 * 1024 * 1024) throw new Error("Import is limited to 20 MB");
       const text = await file.text();
       const parsed = JSON.parse(text);
-      if (!parsed || !Array.isArray(parsed.steps)) {
-        throw new Error("Invalid run format");
-      }
-      runs.push(parsed);
-      await setRuns(runs.slice(1));
+      if (file.size > 20 * 1024 * 1024) throw new Error("Import is limited to 20 MB");
+      validateRun(parsed);
+      await mutate({ kind: "IMPORT_RUN", run: parsed });
+      const active = await getCurrentRun();
+      runs = [...active ? [active] : [], ...await getRuns()];
       renderRunsList();
       selectRun(runs.length - 1);
       jsonArea.value = JSON.stringify(parsed, null, 2);
@@ -320,7 +360,7 @@
     a.href = url;
     a.download = `ui-flow-${run.runId ?? "run"}.json`;
     a.click();
-    URL.revokeObjectURL(url);
+    setTimeout(() => URL.revokeObjectURL(url), 1e3);
   }
   async function onDelete() {
     if (!run || !run.runId) return;
@@ -328,7 +368,7 @@
 
 This cannot be undone.`);
     if (!confirmed) return;
-    await deleteRun(run.runId);
+    await mutate({ kind: "DELETE_RUN", runId: run.runId });
     const idx = runs.indexOf(run);
     if (idx >= 0) {
       runs.splice(idx, 1);
@@ -341,13 +381,16 @@ This cannot be undone.`);
       const newIdx = Math.max(0, idx - 1);
       selectRun(newIdx);
     } else {
-      run = null;
+      selectRun(0);
       renderList();
       stepTypeEl.textContent = "\u2014";
       stepUrlEl.textContent = "\u2014";
       stepTimeEl.textContent = "\u2014";
       viewportEl.textContent = "\u2014";
-      screenshotEl.src = "";
+      screenshotEl.removeAttribute("src");
+      screenshotEl.hidden = true;
+      document.getElementById("imagePlaceholder").hidden = false;
+      document.getElementById("imagePlaceholder").textContent = "Select a recorded step to inspect it.";
       pointerEl.hidden = true;
       selectorForm.innerHTML = "";
       playbackInfoEl.hidden = true;
@@ -355,11 +398,12 @@ This cannot be undone.`);
   }
   function onPlayStart() {
     if (!run || run.steps.length === 0) return;
-    currentIndex = 0;
+    if (isPlaying) return;
+    if (currentIndex >= run.steps.length - 1) currentIndex = 0;
     isPlaying = true;
     playBtn.disabled = true;
     playbackInfoEl.hidden = false;
-    selectIndex(0);
+    selectIndex(currentIndex);
     updatePlaybackStatus();
     playbackInterval = setInterval(() => {
       if (currentIndex < run.steps.length - 1) {
@@ -373,7 +417,7 @@ This cannot be undone.`);
   }
   function onPlayPause() {
     isPlaying = false;
-    playBtn.disabled = false;
+    playBtn.disabled = !run?.steps.length;
     playbackInfoEl.hidden = true;
     if (playbackInterval) {
       clearInterval(playbackInterval);
@@ -386,5 +430,8 @@ This cannot be undone.`);
     const current = currentIndex + 1;
     playbackStatusEl.textContent = `Playing: ${current}/${total}`;
   }
+  window.addEventListener("resize", () => {
+    if (run?.steps[currentIndex]) drawPointer(run.steps[currentIndex]);
+  });
 })();
 //# sourceMappingURL=viewer.js.map

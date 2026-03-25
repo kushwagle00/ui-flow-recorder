@@ -222,3 +222,10 @@ button.primary:hover {
   font-weight: 600;
   font-size: 13px;
 }
+[hidden] { display: none !important; }
+button:disabled { opacity: .45; cursor: default; transform: none; }
+.toolbar { flex-wrap: wrap; }
+.detail, .meta, .steps { min-width: 0; }
+.meta { overflow-wrap: anywhere; }
+@media (max-width: 1250px) { .layout { grid-template-columns: 200px 240px minmax(0,1fr); } .detail-top { grid-template-columns: 1fr; } }
+@media (max-width: 760px) { .header { align-items: flex-start; flex-direction: column; gap: 12px; } .layout { grid-template-columns: 150px minmax(0,1fr); height: auto; } .detail { grid-column: 1 / -1; } }

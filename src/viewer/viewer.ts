@@ -1,5 +1,7 @@
 import type { Run, Step } from "@shared/types";
-import { getCurrentRun, setCurrentRun, getRuns, setRuns, deleteRun } from "@shared/storage";
+import { getCurrentRun, getRuns } from "@shared/storage";
+
+import { validateRun } from "@shared/validation";
 
 const runsListEl = document.getElementById("runsList") as HTMLUListElement;
 const stepListEl = document.getElementById("stepList") as HTMLUListElement;
@@ -37,10 +39,15 @@ let runs: Run[] = [];
 let run: Run | null = null;
 let currentIndex = 0;
 let isPlaying = false;
-let playbackInterval: NodeJS.Timeout | null = null;
+let playbackInterval: ReturnType<typeof setInterval> | null = null;
 let currentRunIdx = 0;
 
-init().catch(console.error);
+async function mutate(msg: object) {
+  const result = await chrome.runtime.sendMessage(msg);
+  if (!result || result.kind === "ERROR") throw new Error(result?.message ?? "Recorder unavailable");
+}
+function report(error: unknown) { alert((error as Error).message ?? String(error)); }
+init().catch(report);
 
 async function init() {
   // Load current run and all past runs
@@ -62,16 +69,23 @@ async function init() {
   detail.appendChild(jsonArea);
 
   // Auto-select first run
-  if (runs.length > 0) {
-    selectRun(0);
-  }
+  selectRun(0);
 }
 
 function renderRunsList() {
   runsListEl.innerHTML = "";
+  if (!runs.length) {
+    const empty = document.createElement("li");
+    empty.textContent = "No recordings yet. Start from the extension popup, or import a JSON recording.";
+    empty.style.padding = "16px";
+    runsListEl.appendChild(empty);
+  }
   runs.forEach((r, idx) => {
     const li = document.createElement("li");
     li.className = "run-item";
+    li.tabIndex = 0;
+    li.setAttribute("role", "button");
+    li.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); selectRun(idx); } });
     li.dataset.index = String(idx);
 
     const runId = document.createElement("div");
@@ -100,6 +114,8 @@ function selectRun(idx: number) {
     onPlayPause();
   }
 
+  jsonArea.style.display = "none";
+  viewJsonBtn.textContent = "View JSON";
   currentRunIdx = idx;
   run = runs[idx] ?? null;
   currentIndex = 0;
@@ -111,6 +127,11 @@ function selectRun(idx: number) {
   });
 
   renderList();
+  const hasSteps = !!run?.steps.length;
+  playBtn.disabled = !hasSteps;
+  exportBtn.disabled = viewJsonBtn.disabled = !run;
+  saveBtn.disabled = deleteBtn.disabled = !run || !run.stoppedAt;
+  prevBtn.disabled = nextBtn.disabled = !hasSteps;
   if (run && run.steps.length > 0) {
     selectIndex(0);
   } else {
@@ -119,7 +140,10 @@ function selectRun(idx: number) {
     stepUrlEl.textContent = "—";
     stepTimeEl.textContent = "—";
     viewportEl.textContent = "—";
-    screenshotEl.src = "";
+    screenshotEl.removeAttribute("src");
+    screenshotEl.hidden = true;
+    document.getElementById("imagePlaceholder")!.hidden = false;
+    document.getElementById("imagePlaceholder")!.textContent = "Select a recorded step to inspect it.";
     pointerEl.hidden = true;
     selectorForm.innerHTML = "";
   }
@@ -143,10 +167,10 @@ function bindActions() {
   viewJsonBtn.addEventListener("click", onViewJson);
   importBtn.addEventListener("click", onImportTrigger);
   importFileInput.addEventListener("change", onImportFile);
-  saveBtn.addEventListener("click", onSave);
+  saveBtn.addEventListener("click", () => onSave().catch(report));
   playBtn.addEventListener("click", onPlayStart);
   pausePlayBtn.addEventListener("click", onPlayPause);
-  deleteBtn.addEventListener("click", onDelete);
+  deleteBtn.addEventListener("click", () => onDelete().catch(report));
 }
 
 function renderList() {
@@ -157,6 +181,9 @@ function renderList() {
   steps.forEach((s, i) => {
     const li = document.createElement("li");
     li.className = "step-item";
+    li.tabIndex = 0;
+    li.setAttribute("role", "button");
+    li.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onPlayPause(); selectIndex(i); } });
     li.dataset.index = String(i);
 
     const title = document.createElement("div");
@@ -173,13 +200,15 @@ function renderList() {
     ts.textContent = new Date(s.timestamp).toLocaleString();
 
     li.append(title, primary, ts);
-    li.addEventListener("click", () => selectIndex(i));
+    li.addEventListener("click", () => { onPlayPause(); selectIndex(i); });
     stepListEl.appendChild(li);
   });
 }
 
 function selectIndex(i: number) {
   currentIndex = i;
+  prevBtn.disabled = i <= 0;
+  nextBtn.disabled = !run || i >= run.steps.length - 1;
   const items = stepListEl.querySelectorAll(".step-item");
   items.forEach((el, idx) => {
     el.classList.toggle("active", idx === i);
@@ -205,15 +234,13 @@ function renderDetail() {
 
   // Screenshot + pointer
   const dataUrl = step.visualContext?.screenshotDataUrl;
-  screenshotEl.src = dataUrl || "";
   pointerEl.hidden = true;
-
-  // Wait for image to compute overlay scaling
-  if (dataUrl) {
-    screenshotEl.onload = () => {
-      drawPointer(step);
-    };
-  }
+  screenshotEl.onload = () => drawPointer(step);
+  screenshotEl.hidden = !dataUrl;
+  document.getElementById("imagePlaceholder")!.hidden = !!dataUrl;
+  document.getElementById("imagePlaceholder")!.textContent = "No screenshot for this step. Event details are available below.";
+  if (dataUrl) screenshotEl.src = dataUrl;
+  else screenshotEl.removeAttribute("src");
 
   // Selectors
   renderSelectors(step);
@@ -234,13 +261,13 @@ function drawPointer(step: Step) {
   // Compute scale from natural image size → rendered size
   const renderedWidth = img.clientWidth;
   const renderedHeight = img.clientHeight;
-  const sx = renderedWidth / img.naturalWidth;
-  const sy = renderedHeight / img.naturalHeight;
+  const sx = renderedWidth / (step.visualContext?.viewport?.width || img.naturalWidth);
+  const sy = renderedHeight / (step.visualContext?.viewport?.height || img.naturalHeight);
 
   // Our coordinates are in viewport pixels (clientX/clientY) during recording.
   // We assume screenshot captured the visible viewport at those dims.
-  const x = pointer.x * sx;
-  const y = pointer.y * sy;
+  const x = img.offsetLeft + pointer.x * sx;
+  const y = img.offsetTop + pointer.y * sy;
 
   pointerEl.style.left = `${x}px`;
   pointerEl.style.top = `${y}px`;
@@ -264,7 +291,7 @@ function renderSelectors(step: Step) {
   }
 
   all.forEach((value, idx) => {
-    const row = document.createElement("div");
+    const row = document.createElement("label");
     row.className = "selector-row";
 
     const input = document.createElement("input");
@@ -300,15 +327,7 @@ async function onSave() {
 
   step.selectors = { primary, alternatives };
 
-  // Save the updated run
-  const runIdx = runs.indexOf(run);
-  if (runIdx === 0 && !(await getCurrentRun())?.runId) {
-    // First run might be current run
-    await setCurrentRun(run);
-  } else {
-    // Save to past runs
-    await setRuns(runs.slice(1)); // Keep all runs except current
-  }
+  await mutate({ kind: "SAVE_RUN", runId: run.runId, stepId: step.stepId, primary });
 
   const li = stepListEl.children[currentIndex] as HTMLLIElement | undefined;
   if (li) {
@@ -340,16 +359,15 @@ async function onImportFile(event: Event) {
 
   try {
     const file = input.files[0];
+    if (file.size > 20 * 1024 * 1024) throw new Error("Import is limited to 20 MB");
     const text = await file.text();
     const parsed = JSON.parse(text) as Run;
 
-    if (!parsed || !Array.isArray(parsed.steps)) {
-      throw new Error("Invalid run format");
-    }
-
-    // Add to runs list
-    runs.push(parsed);
-    await setRuns(runs.slice(1)); // Save all except potential current run
+    if (file.size > 20 * 1024 * 1024) throw new Error("Import is limited to 20 MB");
+    validateRun(parsed);
+    await mutate({ kind: "IMPORT_RUN", run: parsed });
+    const active = await getCurrentRun();
+    runs = [...(active ? [active] : []), ...await getRuns()];
 
     renderRunsList();
     selectRun(runs.length - 1);
@@ -371,7 +389,7 @@ async function onExport() {
   a.href = url;
   a.download = `ui-flow-${run.runId ?? "run"}.json`;
   a.click();
-  URL.revokeObjectURL(url);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 async function onDelete() {
@@ -381,7 +399,7 @@ async function onDelete() {
   if (!confirmed) return;
 
   // Delete from storage
-  await deleteRun(run.runId);
+  await mutate({ kind: "DELETE_RUN", runId: run.runId });
 
   // Remove from runs array
   const idx = runs.indexOf(run);
@@ -400,13 +418,16 @@ async function onDelete() {
     const newIdx = Math.max(0, idx - 1);
     selectRun(newIdx);
   } else {
-    run = null;
+    selectRun(0);
     renderList();
     stepTypeEl.textContent = "—";
     stepUrlEl.textContent = "—";
     stepTimeEl.textContent = "—";
     viewportEl.textContent = "—";
-    screenshotEl.src = "";
+    screenshotEl.removeAttribute("src");
+    screenshotEl.hidden = true;
+    document.getElementById("imagePlaceholder")!.hidden = false;
+    document.getElementById("imagePlaceholder")!.textContent = "Select a recorded step to inspect it.";
     pointerEl.hidden = true;
     selectorForm.innerHTML = "";
     playbackInfoEl.hidden = true;
@@ -416,12 +437,13 @@ async function onDelete() {
 function onPlayStart() {
   if (!run || run.steps.length === 0) return;
   
-  currentIndex = 0;
+  if (isPlaying) return;
+  if (currentIndex >= run.steps.length - 1) currentIndex = 0;
   isPlaying = true;
   playBtn.disabled = true;
   playbackInfoEl.hidden = false;
   
-  selectIndex(0);
+  selectIndex(currentIndex);
   updatePlaybackStatus();
   
   // Auto-advance every 2 seconds
@@ -439,7 +461,7 @@ function onPlayStart() {
 
 function onPlayPause() {
   isPlaying = false;
-  playBtn.disabled = false;
+  playBtn.disabled = !run?.steps.length;
   playbackInfoEl.hidden = true;
   
   if (playbackInterval) {
@@ -456,3 +478,4 @@ function updatePlaybackStatus() {
 }
 
 export {};
+window.addEventListener("resize", () => { if (run?.steps[currentIndex]) drawPointer(run.steps[currentIndex]); });

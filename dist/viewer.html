@@ -1,7 +1,8 @@
 <!doctype html>
-<html>
+<html lang="en">
   <head>
     <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>UI Flow Viewer</title>
     <link rel="stylesheet" href="viewer.css" />
     <!-- Option A: put script in head with defer so it runs after DOM is parsed -->
@@ -40,6 +41,7 @@
       <section class="detail">
         <div class="detail-top">
           <div class="img-wrap">
+            <p id="imagePlaceholder" class="hint">Select a recorded step to inspect it.</p>
             <img id="screenshot" alt="Step screenshot" />
             <!-- Pointer overlay -->
             <div id="pointer" class="pointer" hidden></div>
