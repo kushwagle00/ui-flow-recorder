@@ -4,7 +4,7 @@
 
 The original main branch (`423f8aa`) was not reliable enough for a demo. The corrected build is suitable for a controlled demonstration of recording, inspecting and exchanging short top-level web flows. It is not a production-certified recorder or an automated replay engine.
 
-Repository creation metadata: March 24, 2026. This review and its fixes were implemented on November 13, 2026. At the repository owner's request, the single implementation commit was reorganized into four logical commits with historical author dates of March 24-27, 2026. These author dates are presentation metadata, not evidence that the fixes existed then. The committer dates retain the actual rewrite time. The two original project commits are unchanged.
+Repository creation metadata: March 24, 2026. This review and its fixes were implemented on November 13, 2026. At the repository owner's request, the single implementation commit was reorganized into four logical commits with historical author dates of March 24-27, 2026. These author dates are presentation metadata, not evidence that the fixes existed then. The committer dates retain the actual rewrite time. The two original project commits are unchanged. A fifth follow-up commit, author-dated March 28, fixes an initialization race discovered by CI during the rewrite; it was also implemented on November 13.
 
 ## Findings and changes
 

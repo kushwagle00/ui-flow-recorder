@@ -9,7 +9,7 @@ async function message(msg) { return viewer.evaluate(msg => chrome.runtime.sendM
 async function state() { return viewer.evaluate(() => chrome.storage.local.get(null)); }
 async function tabId() { return viewer.evaluate(async url => (await chrome.tabs.query({})).find(t => t.url?.startsWith(url)).id, site); }
 async function stop() { expect((await message({kind:'STOP_RECORDING'})).kind).toBe('STATUS'); }
-async function loadViewer() { await viewer.reload(); await expect(viewer.locator('#importBtn')).toBeVisible(); }
+async function loadViewer() { await viewer.reload(); await expect(viewer.locator('#importBtn')).toBeEnabled(); }
 function run(id, count=3) { return { runId:id, startedAt:1000, stoppedAt:2000, steps:Array.from({length:count},(_,i)=>({stepId:i+1,timestamp:1000+i,type:'click',url:site,selectors:{primary:'#buy',alternatives:['[data-testid="buy"]']}})) }; }
 test.beforeAll(async () => {
   server = http.createServer((req,res) => { res.setHeader('Content-Type','text/html'); res.end(fixture); });

@@ -64,6 +64,7 @@ async function init() {
   renderRunsList();
   bindNav();
   bindActions();
+  importBtn.disabled = false;
 
   const detail = document.querySelector(".detail") as HTMLElement;
   detail.appendChild(jsonArea);

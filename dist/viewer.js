@@ -82,6 +82,7 @@
     renderRunsList();
     bindNav();
     bindActions();
+    importBtn.disabled = false;
     const detail = document.querySelector(".detail");
     detail.appendChild(jsonArea);
     selectRun(0);
