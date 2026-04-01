@@ -37,6 +37,12 @@ export async function setRuns(runs: Run[]): Promise<void> {
   await chrome.storage.local.set({ [RUNS_KEY]: runs });
 }
 
+export async function deleteRun(runIdToDelete: string): Promise<void> {
+  const runs = await getRuns();
+  const filtered = runs.filter(r => r.runId !== runIdToDelete);
+  await setRuns(filtered);
+}
+
 // Always create a fresh run (new runId, empty steps)
 export async function startNewRun(): Promise<Run> {
   const run: Run = {

@@ -1,20 +1,34 @@
 "use strict";
 (() => {
   // src/shared/storage.ts
-  var RUN_KEY = "currentRun";
+  var CURRENT_RUN_KEY = "currentRun";
+  var RUNS_KEY = "runs";
   async function getCurrentRun() {
-    const data = await chrome.storage.local.get([RUN_KEY]);
-    return data[RUN_KEY] ?? null;
+    const obj = await chrome.storage.local.get([CURRENT_RUN_KEY]);
+    return obj[CURRENT_RUN_KEY] ?? null;
   }
   async function setCurrentRun(run2) {
     if (run2) {
-      await chrome.storage.local.set({ [RUN_KEY]: run2 });
+      await chrome.storage.local.set({ [CURRENT_RUN_KEY]: run2 });
     } else {
-      await chrome.storage.local.remove([RUN_KEY]);
+      await chrome.storage.local.remove([CURRENT_RUN_KEY]);
     }
+  }
+  async function getRuns() {
+    const obj = await chrome.storage.local.get([RUNS_KEY]);
+    return obj[RUNS_KEY] ?? [];
+  }
+  async function setRuns(runs2) {
+    await chrome.storage.local.set({ [RUNS_KEY]: runs2 });
+  }
+  async function deleteRun(runIdToDelete) {
+    const runs2 = await getRuns();
+    const filtered = runs2.filter((r) => r.runId !== runIdToDelete);
+    await setRuns(filtered);
   }
 
   // src/viewer/viewer.ts
+  var runsListEl = document.getElementById("runsList");
   var stepListEl = document.getElementById("stepList");
   var countEl = document.getElementById("count");
   var screenshotEl = document.getElementById("screenshot");
@@ -27,32 +41,111 @@
   var prevBtn = document.getElementById("prevBtn");
   var nextBtn = document.getElementById("nextBtn");
   var exportBtn = document.getElementById("exportBtn");
+  var viewJsonBtn = document.getElementById("viewJsonBtn");
+  var importBtn = document.getElementById("importBtn");
+  var importFileInput = document.getElementById("importFileInput");
   var saveBtn = document.getElementById("saveBtn");
+  var playBtn = document.getElementById("playBtn");
+  var deleteBtn = document.getElementById("deleteBtn");
+  var pausePlayBtn = document.getElementById("pausePlayBtn");
+  var playbackInfoEl = document.getElementById("playbackInfo");
+  var playbackStatusEl = document.getElementById("playbackStatus");
+  var jsonArea = document.createElement("textarea");
+  jsonArea.id = "jsonArea";
+  jsonArea.style.width = "100%";
+  jsonArea.style.height = "200px";
+  jsonArea.style.display = "none";
+  jsonArea.style.marginTop = "12px";
+  var runs = [];
   var run = null;
   var currentIndex = 0;
+  var isPlaying = false;
+  var playbackInterval = null;
+  var currentRunIdx = 0;
   init().catch(console.error);
   async function init() {
-    run = await getCurrentRun();
-    renderList();
+    const currentRun = await getCurrentRun();
+    const pastRuns = await getRuns();
+    runs = [];
+    if (currentRun) {
+      runs.push(currentRun);
+    }
+    runs.push(...pastRuns);
+    renderRunsList();
     bindNav();
     bindActions();
+    const detail = document.querySelector(".detail");
+    detail.appendChild(jsonArea);
+    if (runs.length > 0) {
+      selectRun(0);
+    }
+  }
+  function renderRunsList() {
+    runsListEl.innerHTML = "";
+    runs.forEach((r, idx) => {
+      const li = document.createElement("li");
+      li.className = "run-item";
+      li.dataset.index = String(idx);
+      const runId = document.createElement("div");
+      runId.className = "run-id";
+      runId.title = r.runId;
+      runId.textContent = r.runId?.slice(0, 8) + "...";
+      const runTime = document.createElement("div");
+      runTime.className = "run-time";
+      runTime.textContent = new Date(r.startedAt).toLocaleDateString() + " " + new Date(r.startedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+      const runSteps = document.createElement("div");
+      runSteps.className = "run-steps";
+      runSteps.textContent = `${r.steps.length} steps`;
+      li.append(runId, runTime, runSteps);
+      li.addEventListener("click", () => selectRun(idx));
+      runsListEl.appendChild(li);
+    });
+  }
+  function selectRun(idx) {
+    if (isPlaying) {
+      onPlayPause();
+    }
+    currentRunIdx = idx;
+    run = runs[idx] ?? null;
+    currentIndex = 0;
+    const items = runsListEl.querySelectorAll(".run-item");
+    items.forEach((el, i) => {
+      el.classList.toggle("active", i === idx);
+    });
+    renderList();
     if (run && run.steps.length > 0) {
       selectIndex(0);
+    } else {
+      stepTypeEl.textContent = "\u2014";
+      stepUrlEl.textContent = "\u2014";
+      stepTimeEl.textContent = "\u2014";
+      viewportEl.textContent = "\u2014";
+      screenshotEl.src = "";
+      pointerEl.hidden = true;
+      selectorForm.innerHTML = "";
     }
   }
   function bindNav() {
     prevBtn.addEventListener("click", () => {
       if (!run) return;
+      if (isPlaying) onPlayPause();
       selectIndex(Math.max(0, currentIndex - 1));
     });
     nextBtn.addEventListener("click", () => {
       if (!run) return;
+      if (isPlaying) onPlayPause();
       selectIndex(Math.min(run.steps.length - 1, currentIndex + 1));
     });
   }
   function bindActions() {
     exportBtn.addEventListener("click", onExport);
+    viewJsonBtn.addEventListener("click", onViewJson);
+    importBtn.addEventListener("click", onImportTrigger);
+    importFileInput.addEventListener("change", onImportFile);
     saveBtn.addEventListener("click", onSave);
+    playBtn.addEventListener("click", onPlayStart);
+    pausePlayBtn.addEventListener("click", onPlayPause);
+    deleteBtn.addEventListener("click", onDelete);
   }
   function renderList() {
     stepListEl.innerHTML = "";
@@ -170,11 +263,53 @@
     existing.delete(primary);
     const alternatives = Array.from(existing);
     step.selectors = { primary, alternatives };
-    await setCurrentRun(run);
+    const runIdx = runs.indexOf(run);
+    if (runIdx === 0 && !(await getCurrentRun())?.runId) {
+      await setCurrentRun(run);
+    } else {
+      await setRuns(runs.slice(1));
+    }
     const li = stepListEl.children[currentIndex];
     if (li) {
       const mono = li.querySelector(".mono");
       if (mono) mono.textContent = primary;
+    }
+  }
+  function onViewJson() {
+    if (!run) return;
+    if (jsonArea.style.display === "none") {
+      jsonArea.value = JSON.stringify(run, null, 2);
+      jsonArea.style.display = "block";
+      viewJsonBtn.textContent = "Hide JSON";
+    } else {
+      jsonArea.style.display = "none";
+      viewJsonBtn.textContent = "View JSON";
+    }
+  }
+  function onImportTrigger() {
+    importFileInput.value = "";
+    importFileInput.click();
+  }
+  async function onImportFile(event) {
+    const input = event.target;
+    if (!input.files || !input.files[0]) return;
+    try {
+      const file = input.files[0];
+      const text = await file.text();
+      const parsed = JSON.parse(text);
+      if (!parsed || !Array.isArray(parsed.steps)) {
+        throw new Error("Invalid run format");
+      }
+      runs.push(parsed);
+      await setRuns(runs.slice(1));
+      renderRunsList();
+      selectRun(runs.length - 1);
+      jsonArea.value = JSON.stringify(parsed, null, 2);
+      jsonArea.style.display = "block";
+      viewJsonBtn.textContent = "Hide JSON";
+    } catch (error) {
+      console.error("Failed to import JSON", error);
+      alert("Invalid JSON file. Please select a valid run export.");
     }
   }
   async function onExport() {
@@ -186,6 +321,70 @@
     a.download = `ui-flow-${run.runId ?? "run"}.json`;
     a.click();
     URL.revokeObjectURL(url);
+  }
+  async function onDelete() {
+    if (!run || !run.runId) return;
+    const confirmed = confirm(`Delete recording "${run.runId.slice(0, 8)}..."?
+
+This cannot be undone.`);
+    if (!confirmed) return;
+    await deleteRun(run.runId);
+    const idx = runs.indexOf(run);
+    if (idx >= 0) {
+      runs.splice(idx, 1);
+    }
+    if (isPlaying) {
+      onPlayPause();
+    }
+    renderRunsList();
+    if (runs.length > 0) {
+      const newIdx = Math.max(0, idx - 1);
+      selectRun(newIdx);
+    } else {
+      run = null;
+      renderList();
+      stepTypeEl.textContent = "\u2014";
+      stepUrlEl.textContent = "\u2014";
+      stepTimeEl.textContent = "\u2014";
+      viewportEl.textContent = "\u2014";
+      screenshotEl.src = "";
+      pointerEl.hidden = true;
+      selectorForm.innerHTML = "";
+      playbackInfoEl.hidden = true;
+    }
+  }
+  function onPlayStart() {
+    if (!run || run.steps.length === 0) return;
+    currentIndex = 0;
+    isPlaying = true;
+    playBtn.disabled = true;
+    playbackInfoEl.hidden = false;
+    selectIndex(0);
+    updatePlaybackStatus();
+    playbackInterval = setInterval(() => {
+      if (currentIndex < run.steps.length - 1) {
+        currentIndex++;
+        selectIndex(currentIndex);
+        updatePlaybackStatus();
+      } else {
+        onPlayPause();
+      }
+    }, 2e3);
+  }
+  function onPlayPause() {
+    isPlaying = false;
+    playBtn.disabled = false;
+    playbackInfoEl.hidden = true;
+    if (playbackInterval) {
+      clearInterval(playbackInterval);
+      playbackInterval = null;
+    }
+  }
+  function updatePlaybackStatus() {
+    if (!run) return;
+    const total = run.steps.length;
+    const current = currentIndex + 1;
+    playbackStatusEl.textContent = `Playing: ${current}/${total}`;
   }
 })();
 //# sourceMappingURL=viewer.js.map

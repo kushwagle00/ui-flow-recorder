@@ -1,19 +1,29 @@
 // src/shared/storage.ts
-var RUN_KEY = "currentRun";
+var CURRENT_RUN_KEY = "currentRun";
+var RUNS_KEY = "runs";
+var RECORDING_FLAG_KEY = "isRecording";
+async function setRecordingFlag(flag) {
+  await chrome.storage.local.set({ [RECORDING_FLAG_KEY]: flag });
+}
 async function getCurrentRun() {
-  const data = await chrome.storage.local.get([RUN_KEY]);
-  return data[RUN_KEY] ?? null;
+  const obj = await chrome.storage.local.get([CURRENT_RUN_KEY]);
+  return obj[CURRENT_RUN_KEY] ?? null;
 }
 async function setCurrentRun(run) {
   if (run) {
-    await chrome.storage.local.set({ [RUN_KEY]: run });
+    await chrome.storage.local.set({ [CURRENT_RUN_KEY]: run });
   } else {
-    await chrome.storage.local.remove([RUN_KEY]);
+    await chrome.storage.local.remove([CURRENT_RUN_KEY]);
   }
 }
-async function ensureRun() {
-  const existing = await getCurrentRun();
-  if (existing) return existing;
+async function getRuns() {
+  const obj = await chrome.storage.local.get([RUNS_KEY]);
+  return obj[RUNS_KEY] ?? [];
+}
+async function setRuns(runs) {
+  await chrome.storage.local.set({ [RUNS_KEY]: runs });
+}
+async function startNewRun() {
   const run = {
     runId: crypto.randomUUID(),
     startedAt: Date.now(),
@@ -23,7 +33,8 @@ async function ensureRun() {
   return run;
 }
 async function pushStep(step) {
-  const run = await ensureRun();
+  const run = await getCurrentRun();
+  if (!run) return;
   run.steps.push(step);
   await setCurrentRun(run);
 }
@@ -31,7 +42,10 @@ async function finalizeRun() {
   const run = await getCurrentRun();
   if (!run) return null;
   run.stoppedAt = Date.now();
-  await setCurrentRun(run);
+  const runs = await getRuns();
+  runs.push(run);
+  await setRuns(runs);
+  await setCurrentRun(null);
   return run;
 }
 
@@ -76,15 +90,18 @@ function nextStepId() {
   else lastStepId = now;
   return lastStepId;
 }
-chrome.runtime.onInstalled.addListener(() => {
+async function hydrateRecordingFlag() {
   isRecording = false;
-});
+  await setRecordingFlag(false);
+}
+hydrateRecordingFlag();
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   (async () => {
     if (!(msg && typeof msg === "object" && "kind" in msg)) {
       return;
     }
-    if (msg.kind === "GET_STATUS") {
+    const popupMsg = msg;
+    if (popupMsg.kind === "GET_STATUS") {
       const run = await getCurrentRun();
       sendResponse({
         kind: "STATUS",
@@ -94,34 +111,28 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       });
       return;
     }
-    if (msg.kind === "TOGGLE_RECORDING") {
-      isRecording = !isRecording;
+    if (popupMsg.kind === "START_RECORDING") {
+      if (!isRecording) {
+        isRecording = true;
+        await setRecordingFlag(true);
+        await startNewRun();
+      }
+      const run = await getCurrentRun();
+      sendResponse({ kind: "STATUS", isRecording, runId: run?.runId, stepCount: run?.steps.length ?? 0 });
+      return;
+    }
+    if (popupMsg.kind === "STOP_RECORDING") {
       if (isRecording) {
-        await ensureRun();
-      } else {
+        isRecording = false;
+        await setRecordingFlag(false);
         await finalizeRun();
       }
       const run = await getCurrentRun();
-      sendResponse({
-        kind: "STATUS",
-        isRecording,
-        runId: run?.runId,
-        stepCount: run?.steps.length ?? 0
-      });
+      sendResponse({ kind: "STATUS", isRecording, runId: run?.runId, stepCount: run?.steps.length ?? 0 });
       return;
     }
-    if (msg.kind === "GET_CURRENT_RUN") {
+    if (popupMsg.kind === "GET_CURRENT_RUN") {
       const run = await getCurrentRun();
-      sendResponse({
-        kind: "CURRENT_RUN",
-        runId: run?.runId,
-        steps: run?.steps
-      });
-      return;
-    }
-    if (msg.kind === "STOP_AND_EXPORT") {
-      isRecording = false;
-      const run = await finalizeRun();
       sendResponse({
         kind: "CURRENT_RUN",
         runId: run?.runId,

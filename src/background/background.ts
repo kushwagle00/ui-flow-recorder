@@ -74,8 +74,14 @@ function nextStepId(): number {
  */
 
 async function hydrateRecordingFlag() {
-  isRecording = await getRecordingFlag();
+  // On service worker startup, always reset to false to avoid stale state
+  // from a crash or unexpected termination
+  isRecording = false;
+  await setRecordingFlag(false);
 }
+
+// Ensure state is clean on startup
+hydrateRecordingFlag();
 
 
 /**
@@ -91,7 +97,9 @@ chrome.runtime.onMessage.addListener((msg: MsgFromContent | MsgFromPopup, sender
     // ─────────────────────────────────────────────────────────────
     // Popup → Status
     // ─────────────────────────────────────────────────────────────
-    if (msg.kind === "GET_STATUS") {
+    const popupMsg = msg as MsgFromPopup;
+
+    if (popupMsg.kind === "GET_STATUS") {
       const run = await getCurrentRun();
       sendResponse({
         kind: "STATUS",
@@ -102,36 +110,30 @@ chrome.runtime.onMessage.addListener((msg: MsgFromContent | MsgFromPopup, sender
       return;
     }
 
-    if (msg.kind === "TOGGLE_RECORDING") {
-      isRecording = !isRecording;
+    if (popupMsg.kind === "START_RECORDING") {
+      if (!isRecording) {
+        isRecording = true;
+        await setRecordingFlag(true);
+        await startNewRun();
+      }
+      const run = await getCurrentRun();
+      sendResponse({ kind: "STATUS", isRecording, runId: run?.runId, stepCount: run?.steps.length ?? 0 });
+      return;
+    }
+
+    if (popupMsg.kind === "STOP_RECORDING") {
       if (isRecording) {
-        await ensureRun();
-      } else {
+        isRecording = false;
+        await setRecordingFlag(false);
         await finalizeRun();
       }
       const run = await getCurrentRun();
-      sendResponse({
-        kind: "STATUS",
-        isRecording,
-        runId: run?.runId,
-        stepCount: run?.steps.length ?? 0
-      });
+      sendResponse({ kind: "STATUS", isRecording, runId: run?.runId, stepCount: run?.steps.length ?? 0 });
       return;
     }
 
-    if (msg.kind === "GET_CURRENT_RUN") {
+    if (popupMsg.kind === "GET_CURRENT_RUN") {
       const run = await getCurrentRun();
-      sendResponse({
-        kind: "CURRENT_RUN",
-        runId: run?.runId,
-        steps: run?.steps
-      });
-      return;
-    }
-
-    if (msg.kind === "STOP_AND_EXPORT") {
-      isRecording = false;
-      const run = await finalizeRun();
       sendResponse({
         kind: "CURRENT_RUN",
         runId: run?.runId,

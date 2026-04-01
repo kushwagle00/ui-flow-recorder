@@ -5,10 +5,10 @@ export type MsgFromContent =
   | { kind: "NAVIGATION"; url: string };
 
 export type MsgFromPopup =
-  | { kind: "TOGGLE_RECORDING" }
+  | { kind: "START_RECORDING" }
+  | { kind: "STOP_RECORDING" }
   | { kind: "GET_STATUS" }
-  | { kind: "GET_CURRENT_RUN" }
-  | { kind: "STOP_AND_EXPORT" };
+  | { kind: "GET_CURRENT_RUN" };
 
 export type MsgToPopup =
   | { kind: "STATUS"; isRecording: boolean; runId?: string; stepCount?: number }

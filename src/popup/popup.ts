@@ -4,8 +4,8 @@ import type { Run } from "@shared/types";
 const statusText = document.getElementById("statusText")!;
 const runIdEl = document.getElementById("runId")!;
 const stepCountEl = document.getElementById("stepCount")!;
-const toggleBtn = document.getElementById("toggleBtn") as HTMLButtonElement;
-const exportBtn = document.getElementById("exportBtn") as HTMLButtonElement;
+const startBtn = document.getElementById("startBtn") as HTMLButtonElement;
+const stopBtn = document.getElementById("stopBtn") as HTMLButtonElement;
 const openViewerBtn = document.getElementById("openViewerBtn") as HTMLButtonElement;
 
 openViewerBtn.addEventListener("click", async () => {
@@ -20,8 +20,10 @@ function sendPopupMessage<T extends MsgFromPopup>(msg: T): Promise<MsgToPopup | 
 }
 
 function updateStatusUI(isRecording: boolean, runId?: string, stepCount?: number) {
-  statusText.textContent = isRecording ? "Recording…" : "Idle";
-  toggleBtn.textContent = isRecording ? "Stop Recording" : "Start Recording";
+  statusText.textContent = isRecording ? "🔴 Recording..." : "⚪ Idle";
+  statusText.className = isRecording ? "status-recording" : "status-idle";
+  startBtn.disabled = isRecording;
+  stopBtn.disabled = !isRecording;
   runIdEl.textContent = runId ?? "—";
   stepCountEl.textContent = String(stepCount ?? 0);
 }
@@ -34,48 +36,25 @@ async function refresh() {
 }
 
 
-toggleBtn.addEventListener("click", async () => {
-  console.log("Popup: toggle");
-  try {
-    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    if (tab?.id) {
-      // Try to inject the latest content script (ignores restricted pages)
+startBtn.addEventListener("click", async () => {
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (tab?.id) {
+    try {
       await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ["content.js"] });
+    } catch {
+      // Ignore restricted pages (chrome://, Web Store, PDF)
     }
-  } catch {
-    // Some pages (chrome://, Web Store, PDF) disallow injections—safe to ignore
   }
-
-  const resp = await sendPopupMessage({ kind: "TOGGLE_RECORDING" });
+  const resp = await sendPopupMessage({ kind: "START_RECORDING" });
   if (resp && resp.kind === "STATUS") {
     updateStatusUI(resp.isRecording, resp.runId, resp.stepCount);
   }
 });
 
-toggleBtn.addEventListener("click", async () => {
-  const resp = await sendPopupMessage({ kind: "TOGGLE_RECORDING" });
+stopBtn.addEventListener("click", async () => {
+  const resp = await sendPopupMessage({ kind: "STOP_RECORDING" });
   if (resp && resp.kind === "STATUS") {
     updateStatusUI(resp.isRecording, resp.runId, resp.stepCount);
-  }
-});
-
-exportBtn.addEventListener("click", async () => {
-  const resp = await sendPopupMessage({ kind: "STOP_AND_EXPORT" });
-  if (resp && resp.kind === "CURRENT_RUN" && resp.steps && resp.runId) {
-    // Download JSON via Blob without requiring "downloads" permission
-    const run: Partial<Run> = {
-      runId: resp.runId,
-      steps: resp.steps
-    };
-    const blob = new Blob([JSON.stringify(run, null, 2)], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `ui-flow-${resp.runId}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-    await refresh();
   }
 });
 

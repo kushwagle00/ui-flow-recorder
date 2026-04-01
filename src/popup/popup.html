@@ -8,16 +8,25 @@
   <body>
     <div class="container">
       <h1>UI Flow Recorder</h1>
-      <div id="status">Status: <span id="statusText">Idle</span></div>
-      <div id="runInfo">Run: <span id="runId">—</span> | Steps: <span id="stepCount">0</span></div>
-
-      <div class="actions">
-        <button id="toggleBtn">Start Recording</button>
-        <button id="exportBtn">Stop & Export</button>
-        <button id="openViewerBtn">Open Viewer</button>
+      
+      <div id="status">
+        <span>Status:&nbsp;</span>
+        <span id="statusText">Idle</span>
+      </div>
+      
+      <div id="runInfo">
+        <strong>Run:</strong> <span id="runId">—</span>
+        <br />
+        <strong>Steps:</strong> <span id="stepCount">0</span>
       </div>
 
-      <small class="hint">Recording captures clicks, inputs, navigations + screenshots.</small>
+      <div class="actions">
+        <button id="startBtn">▶ Start Recording</button>
+        <button id="stopBtn" disabled>⏹ Stop Recording</button>
+        <button id="openViewerBtn">👁 Open Viewer</button>
+      </div>
+
+      <small class="hint">Captures clicks, form inputs, navigation, and screenshots</small>
     </div>
 
     <!-- IMPORTANT: external file, no inline JS -->

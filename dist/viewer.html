@@ -11,12 +11,24 @@
     <header class="header">
       <h1>UI Flow Viewer</h1>
       <div class="toolbar">
+        <button id="playBtn">▶ Play</button>
         <button id="exportBtn">Export JSON</button>
+        <button id="viewJsonBtn">View JSON</button>
+        <button id="importBtn">Import JSON</button>
+        <button id="deleteBtn" style="color: #ef4444;">🗑 Delete</button>
         <button id="saveBtn" class="primary">Save Changes</button>
+        <input id="importFileInput" type="file" accept="application/json" hidden />
       </div>
     </header>
 
     <main class="layout">
+      <aside class="runs-panel">
+        <div class="runs-header">
+          <span>Recordings</span>
+        </div>
+        <ul id="runsList" class="runs-list"></ul>
+      </aside>
+
       <aside class="steps">
         <div class="steps-header">
           <span>Steps</span>
@@ -50,6 +62,10 @@
 
         <div class="nav">
           <button id="prevBtn">← Prev</button>
+          <div class="playback-info" id="playbackInfo" hidden>
+            <span id="playbackStatus">Playing: 1/10</span>
+            <button id="pausePlayBtn" style="margin-left: 8px;">⏸ Pause</button>
+          </div>
           <button id="nextBtn">Next →</button>
         </div>
       </section>
