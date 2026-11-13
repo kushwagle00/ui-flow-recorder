@@ -1,137 +1,130 @@
-body {
-  font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
-  margin: 0;
-  padding: 16px;
-  width: 320px;
-  background: #f8f9fa;
+* {
+  box-sizing: border-box;
 }
-
+body {
+  margin: 0;
+  width: 360px;
+  background: #f7f9fc;
+  color: #192741;
+  font:
+    14px/1.5 system-ui,
+    sans-serif;
+}
 .container {
-  display: flex;
-  flex-direction: column;
+  padding: 24px;
+  display: grid;
   gap: 12px;
 }
-
-h1 {
-  font-size: 18px;
-  font-weight: 600;
+.eyebrow {
+  font-size: 10px;
+  letter-spacing: 0.13em;
+  font-weight: 800;
+  color: #4262a2;
   margin: 0;
-  color: #1a1a1a;
 }
-
+h1 {
+  font-size: 23px;
+  line-height: 1.2;
+  letter-spacing: -0.5px;
+  margin: 0;
+}
+.intro,
+.hint {
+  color: #5c6b81;
+  margin: 0;
+  font-size: 12px;
+}
 #status {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin: 0;
-  padding: 10px 12px;
+  gap: 12px;
   background: white;
-  border-radius: 8px;
-  border: 1px solid #e0e0e0;
+  border: 1px solid #dce3ef;
+  border-radius: 10px;
+  padding: 14px;
+  margin: 4px 0;
 }
-
-#statusText {
-  font-weight: 600;
-  padding: 4px 8px;
-  border-radius: 4px;
-  display: inline-block;
+#status small {
+  display: block;
+  font-size: 11px;
+  color: #64748b;
+  margin-top: 3px;
 }
-
-#statusText.status-idle {
-  background: #dbeafe;
-  color: #0066cc;
+.dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #94a3b8;
+  flex-shrink: 0;
 }
-
-#statusText.status-recording {
-  background: #fee2e2;
-  color: #cc0000;
-  animation: pulse 1.5s infinite;
+body[data-recording="true"] .dot {
+  background: #dc2626;
+  box-shadow: 0 0 0 4px #fee2e2;
+}
+body[data-paused="true"] .dot {
+  background: #a16207;
+  box-shadow: 0 0 0 4px #fef3c7;
+}
+label {
+  font-size: 12px;
   font-weight: 700;
 }
-
-@keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.6; }
-}
-
-#runInfo {
-  margin: 0;
-  padding: 8px 12px;
+input {
+  width: 100%;
+  padding: 11px;
+  border: 1px solid #ccd6e5;
+  border-radius: 7px;
+  font: inherit;
   background: white;
-  border-radius: 8px;
-  border: 1px solid #e0e0e0;
-  font-size: 13px;
-  color: #555;
+  color: inherit;
 }
-
-#runInfo span {
-  font-family: ui-monospace, monospace;
+input:focus,
+button:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
+}
+#runInfo {
   font-size: 12px;
-  color: #0066cc;
+  color: #64748b;
 }
-
+#stepCount {
+  font-size: 20px;
+  color: #20375d;
+}
 .actions {
   display: grid;
-  grid-template-columns: 1fr;
   gap: 8px;
 }
-
 button {
-  padding: 10px 12px;
-  border: none;
-  background: #0066cc;
-  color: white;
-  border-radius: 6px;
+  border: 1px solid #d5ddeb;
+  border-radius: 8px;
+  padding: 11px;
+  font: 600 13px system-ui;
+  background: white;
+  color: #20375d;
   cursor: pointer;
-  font-size: 13px;
-  font-weight: 500;
-  transition: all 0.2s ease;
 }
-
-button:hover:not(:disabled) {
-  background: #004fa3;
-  transform: translateY(-1px);
-  box-shadow: 0 2px 8px rgba(0, 102, 204, 0.2);
+#startBtn,
+#stopBtn {
+  background: #244cc8;
+  color: white;
+  border-color: #244cc8;
 }
-
-button:active:not(:disabled) {
-  transform: translateY(0);
+button:hover {
+  filter: brightness(0.95);
 }
-
 button:disabled {
   opacity: 0.5;
-  cursor: not-allowed;
+  cursor: default;
 }
-
-#startBtn {
-  background: #10b981;
-}
-
-#startBtn:hover:not(:disabled) {
-  background: #059669;
-}
-
-#stopBtn:not(:disabled) {
-  background: #ef4444;
-}
-
-#stopBtn:not(:disabled):hover {
-  background: #dc2626;
-}
-
-#openViewerBtn {
-  background: #8b5cf6;
-}
-
-#openViewerBtn:hover {
-  background: #7c3aed;
-}
-
-.hint {
-  display: block;
-  margin: 0;
-  margin-top: 4px;
+#error {
+  color: #b91c1c;
+  background: #fff1f2;
+  padding: 10px;
+  border-radius: 7px;
   font-size: 12px;
-  color: #888;
-  line-height: 1.4;
+  margin: 0;
+}
+[hidden] {
+  display: none !important;
 }

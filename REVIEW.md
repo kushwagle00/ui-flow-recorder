@@ -33,3 +33,7 @@ Real Chromium extension tests cover rapid events without losses, duplicate injec
 ## Remaining presentation constraints
 
 Use fictional data on the bundled HTTP demo and stop before opening the viewer. Test loading in the stable Chrome version and display scaling used for the presentation. Browser toolbar invocation and OS scaling are manual acceptance items; automated tests exercise popup content in an extension page. Screenshots are sampled and best effort; not every step has an image. Blur fields to commit input changes. Refresh an open viewer for new runs. Frames, closed shadow DOM, full browser restart recovery, long-session performance/retention, comprehensive PII detection, and automatic replay remain outside this demo's supported scope. See README for details.
+
+## Manual QA usability follow-up
+
+Added visible recording controls and toolbar badges, pause/resume, named sessions, direct Stop & review navigation, human-readable steps, per-step QA results/notes, and Markdown reports. Technical selectors remain available in a collapsed section. Eight real Chromium scenarios cover the existing flows plus indicator persistence, paused navigation, controls excluded from captured steps, badge state, QA review persistence, report contents and unsaved-change protection. Existing recordings remain compatible.

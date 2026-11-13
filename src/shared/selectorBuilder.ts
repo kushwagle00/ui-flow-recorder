@@ -33,13 +33,29 @@ export function getElementSnapshot(target: Element) {
     name: target.getAttribute("name") || undefined,
     class: target.getAttribute("class") || undefined,
     role: target.getAttribute("role") || undefined,
-    "data-testid": (target as HTMLElement).dataset?.testid
+    "aria-label": target.getAttribute("aria-label") || undefined,
+    "data-testid": (target as HTMLElement).dataset?.testid,
   };
-  const text = (target as HTMLElement).innerText?.trim();
+  const labels =
+    target instanceof HTMLInputElement ||
+    target instanceof HTMLSelectElement ||
+    target instanceof HTMLTextAreaElement
+      ? Array.from(target.labels ?? [])
+          .map((label) => label.textContent?.trim())
+          .filter(Boolean)
+          .join(" ")
+      : "";
+  const text =
+    labels ||
+    target.getAttribute("aria-label") ||
+    (target as HTMLElement).innerText?.trim();
   return { tag, text, attributes: attrs };
 }
 
-export function buildSelectors(target: Element): { primary: string; alternatives: string[] } {
+export function buildSelectors(target: Element): {
+  primary: string;
+  alternatives: string[];
+} {
   const alts: string[] = [];
   const el = target as HTMLElement;
 
@@ -67,12 +83,29 @@ export function buildSelectors(target: Element): { primary: string; alternatives
   const path: string[] = [];
   let node: Element | null = el;
   while (node) {
-    const siblings: Element[] = node.parentElement ? Array.from(node.parentElement.children).filter(s => s.tagName === node!.tagName) : [node];
-    path.unshift(`${node.tagName.toLowerCase()}:nth-of-type(${siblings.indexOf(node) + 1})`);
+    const siblings: Element[] = node.parentElement
+      ? Array.from(node.parentElement.children).filter(
+          (s) => s.tagName === node!.tagName,
+        )
+      : [node];
+    path.unshift(
+      `${node.tagName.toLowerCase()}:nth-of-type(${siblings.indexOf(node) + 1})`,
+    );
     node = node.parentElement;
   }
-  const unique = alts.find(s => {
-    try { return document.querySelectorAll(s).length === 1 && document.querySelector(s) === el; } catch { return false; }
-  }) ?? path.join(" > ");
-  return { primary: unique, alternatives: [...new Set(alts)].filter(s => s !== unique) };
+  const unique =
+    alts.find((s) => {
+      try {
+        return (
+          document.querySelectorAll(s).length === 1 &&
+          document.querySelector(s) === el
+        );
+      } catch {
+        return false;
+      }
+    }) ?? path.join(" > ");
+  return {
+    primary: unique,
+    alternatives: [...new Set(alts)].filter((s) => s !== unique),
+  };
 }

@@ -1,5 +1,10 @@
 # Features
 
+- On-page recording indicator with session time, live step count, Pause/Resume and Stop & review.
+- Chrome toolbar REC/paused badges and a shortcut back to the recording tab.
+- Named QA sessions, human-readable actions, per-step results and expected/actual notes.
+- Downloadable Markdown QA reports alongside the full JSON evidence export.
+
 - Single-tab recording of clicks, committed form changes and navigation.
 - Best-effort screenshots with viewport and pointer context.
 - Unique primary CSS selector plus labeled alternatives.

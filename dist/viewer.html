@@ -2,74 +2,150 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>UI Flow Viewer</title>
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>QA Session Review · UI Flow Recorder</title>
     <link rel="stylesheet" href="viewer.css" />
-    <!-- Option A: put script in head with defer so it runs after DOM is parsed -->
     <script src="viewer.js" defer></script>
   </head>
   <body>
     <header class="header">
-      <h1>UI Flow Viewer</h1>
+      <div>
+        <p class="eyebrow">UI FLOW RECORDER / MANUAL QA</p>
+        <h1>Review your test journey</h1>
+      </div>
       <div class="toolbar">
-        <button id="playBtn">▶ Play</button>
-        <button id="exportBtn">Export JSON</button>
-        <button id="viewJsonBtn">View JSON</button>
-        <button id="importBtn" disabled>Import JSON</button>
-        <button id="deleteBtn" style="color: #ef4444;">🗑 Delete</button>
-        <button id="saveBtn" class="primary">Save Changes</button>
-        <input id="importFileInput" type="file" accept="application/json" hidden />
+        <button id="refreshBtn">Refresh sessions</button
+        ><button id="importBtn" disabled>Import session</button
+        ><button id="reportBtn" class="primary">Download QA report</button
+        ><input
+          id="importFileInput"
+          type="file"
+          accept="application/json"
+          hidden
+        />
       </div>
     </header>
-
+    <div class="guide">
+      <span><b>1</b> Record on your test page</span
+      ><span><b>2</b> Review steps &amp; results</span
+      ><span><b>3</b> Share the evidence</span>
+    </div>
     <main class="layout">
       <aside class="runs-panel">
-        <div class="runs-header">
-          <span>Recordings</span>
-        </div>
+        <div class="runs-header">Test sessions</div>
         <ul id="runsList" class="runs-list"></ul>
+        <p class="panel-hint">
+          To capture a new test, open your website and select Start recording in
+          the extension.
+        </p>
       </aside>
-
       <aside class="steps">
         <div class="steps-header">
-          <span>Steps</span>
-          <span id="count" class="count">0</span>
+          <span>Captured steps</span><span id="count" class="count">0</span>
         </div>
         <ul id="stepList" class="step-list"></ul>
       </aside>
-
       <section class="detail">
+        <section class="session-card">
+          <label for="sessionTitle">SESSION NAME</label
+          ><input
+            id="sessionTitle"
+            maxlength="120"
+            placeholder="Give this test a useful name"
+          />
+          <p id="sessionSummary" class="hint"></p>
+          <p id="liveHint" class="live-hint" hidden>
+            Recording is still open. Stop &amp; review from the page controls
+            before adding results.
+          </p>
+        </section>
+        <div class="step-heading">
+          <div>
+            <p id="stepPosition" class="eyebrow"></p>
+            <h2 id="stepAction">Select a step to review</h2>
+          </div>
+          <button id="playBtn">Play walkthrough</button>
+        </div>
         <div class="detail-top">
           <div class="img-wrap">
-            <p id="imagePlaceholder" class="hint">Select a recorded step to inspect it.</p>
-            <img id="screenshot" alt="Step screenshot" />
-            <!-- Pointer overlay -->
+            <p id="imagePlaceholder" class="hint">
+              Your screenshots will appear here. Start a session from the
+              extension popup.
+            </p>
+            <img
+              id="screenshot"
+              alt="Evidence captured for the selected step"
+              hidden
+            />
             <div id="pointer" class="pointer" hidden></div>
           </div>
           <div class="meta">
-            <div><strong>Type:</strong> <span id="stepType">—</span></div>
-            <div><strong>URL:</strong> <span id="stepUrl" class="mono">—</span></div>
-            <div><strong>Timestamp:</strong> <span id="stepTime">—</span></div>
-            <div><strong>Viewport:</strong> <span id="viewport">—</span></div>
+            <div><strong>Action</strong><span id="stepType">—</span></div>
+            <div><strong>Page</strong><span id="stepUrl">—</span></div>
+            <div>
+              <strong>Input captured</strong><span id="stepValue">—</span>
+            </div>
+            <div><strong>Time</strong><span id="stepTime">—</span></div>
+            <div><strong>Viewport</strong><span id="viewport">—</span></div>
           </div>
         </div>
-
-        <div class="selectors">
-          <h2>Selectors</h2>
-          <form id="selectorForm" class="selector-form"></form>
-          <small class="hint">
-            Pick a primary selector. Alternatives remain as fallbacks.
-          </small>
-        </div>
-
-        <div class="nav">
-          <button id="prevBtn">← Prev</button>
+        <form id="qaForm" class="qa-card">
+          <div class="qa-heading">
+            <h2>What did you observe?</h2>
+            <label
+              >Step result
+              <select id="qaResult">
+                <option value="not-reviewed">Not reviewed</option>
+                <option value="pass">Pass</option>
+                <option value="fail">Fail</option>
+                <option value="blocked">Blocked</option>
+              </select></label
+            >
+          </div>
+          <div class="qa-fields">
+            <label for="expected"
+              >Expected result<textarea
+                id="expected"
+                maxlength="10000"
+                placeholder="What should happen at this step?"
+              ></textarea></label
+            ><label for="actual"
+              >Actual result / notes<textarea
+                id="actual"
+                maxlength="10000"
+                placeholder="What happened? Include useful details for the developer."
+              ></textarea>
+            </label>
+          </div>
+          <div class="qa-footer">
+            <span id="saveStatus" role="status"
+              >Changes stay local until you export.</span
+            ><button id="saveReviewBtn" type="submit" class="primary">
+              Save review
+            </button>
+          </div>
+        </form>
+        <nav class="nav" aria-label="Step navigation">
+          <button id="prevBtn">← Previous step</button>
           <div class="playback-info" id="playbackInfo" hidden>
-            <span id="playbackStatus">Playing: 1/10</span>
-            <button id="pausePlayBtn" style="margin-left: 8px;">⏸ Pause</button>
+            <span id="playbackStatus"></span
+            ><button id="pausePlayBtn">Pause walkthrough</button>
           </div>
-          <button id="nextBtn">Next →</button>
-        </div>
+          <button id="nextBtn">Next step →</button>
+        </nav>
+        <details class="selectors">
+          <summary>Technical details &amp; export options</summary>
+          <p class="hint">
+            Optional selectors for developers and automation tools.
+          </p>
+          <form id="selectorForm" class="selector-form"></form>
+          <div class="technical-actions">
+            <button id="saveBtn">Save selector</button
+            ><button id="exportBtn">Export session JSON</button
+            ><button id="viewJsonBtn">View JSON</button
+            ><button id="deleteBtn" class="danger">Delete session</button>
+          </div>
+        </details>
       </section>
     </main>
   </body>

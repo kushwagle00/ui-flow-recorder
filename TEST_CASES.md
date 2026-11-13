@@ -14,3 +14,11 @@ Run `npm test` for automated regression results. These manual items are a checkl
 - [ ] Try Start on a restricted page and check the readable error.
 
 Automated coverage lives in `tests/extension.spec.js`. Browser-owned toolbar invocation, manual stable-Chrome loading, and OS display-scale checks remain manual.
+
+## Manual QA controls
+
+- [ ] Pin the extension and verify the REC badge and floating page bar after Start.
+- [ ] Pause, navigate and interact; confirm the step count stays unchanged. Resume.
+- [ ] Move the bar if it covers a page control; stop and confirm the correct session opens.
+- [ ] Name the session, mark a failed step, write expected/actual results and save.
+- [ ] Download the QA report and confirm notes are included. Export JSON separately for screenshots.

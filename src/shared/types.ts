@@ -26,12 +26,19 @@ export interface Step {
   element?: ElementSnapshot;
   selectors?: Selectors;
 
+  review?: {
+    result: "not-reviewed" | "pass" | "fail" | "blocked";
+    expected: string;
+    actual: string;
+  };
   value?: string; // for input
   visualContext?: VisualContext;
 }
 
 export interface Run {
   runId: string;
+  title?: string;
+  paused?: boolean;
   tabId?: number;
   startedAt: number;
   stoppedAt?: number;

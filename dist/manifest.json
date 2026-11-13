@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "UI Flow Recorder",
-  "version": "0.1.0",
-  "description": "Record UI interactions with screenshots and selectors.",
+  "version": "0.2.0",
+  "description": "Manual QA assistant: record test journeys, capture evidence, and review expected versus actual results.",
   "permissions": [
     "storage",
     "tabs",

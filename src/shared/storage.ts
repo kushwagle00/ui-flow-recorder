@@ -7,7 +7,9 @@ const RECORDING_FLAG_KEY = "isRecording";
 
 // ---------- Recording flag ----------
 export async function getRecordingFlag(): Promise<boolean> {
-  const { [RECORDING_FLAG_KEY]: flag } = await chrome.storage.local.get([RECORDING_FLAG_KEY]);
+  const { [RECORDING_FLAG_KEY]: flag } = await chrome.storage.local.get([
+    RECORDING_FLAG_KEY,
+  ]);
   return Boolean(flag);
 }
 export async function setRecordingFlag(flag: boolean): Promise<void> {
@@ -39,7 +41,7 @@ export async function setRuns(runs: Run[]): Promise<void> {
 
 export async function deleteRun(runIdToDelete: string): Promise<void> {
   const runs = await getRuns();
-  const filtered = runs.filter(r => r.runId !== runIdToDelete);
+  const filtered = runs.filter((r) => r.runId !== runIdToDelete);
   await setRuns(filtered);
 }
 
@@ -49,7 +51,7 @@ export async function startNewRun(tabId?: number): Promise<Run> {
     runId: crypto.randomUUID(),
     tabId,
     startedAt: Date.now(),
-    steps: []
+    steps: [],
   };
   await setCurrentRun(run);
   return run;
@@ -70,7 +72,7 @@ export async function finalizeRun(): Promise<Run | null> {
   run.stoppedAt = Date.now();
 
   const runs = await getRuns();
-  const existing = runs.findIndex(r => r.runId === run.runId);
+  const existing = runs.findIndex((r) => r.runId === run.runId);
   if (existing >= 0) runs[existing] = run;
   else runs.push(run);
   await chrome.storage.local.set({ runs, isRecording: false });

@@ -15,13 +15,27 @@ npm run build
 
 Open `chrome://extensions`, enable Developer mode, choose **Load unpacked**, and select `dist`. Pin **UI Flow Recorder** to the toolbar. After rebuilding, click Reload on the extension and refresh the target page. The checked-in `dist` also supports loading without a build.
 
+## Manual QA workflow
+
+- Give the test a name in the popup, then **Start recording this tab**.
+- A floating bar on the test page shows **Recording**, session time, and captured step count. The extension icon also shows **REC** (pin it to see the badge).
+- Use **Pause** for setup/private actions and **Resume** to continue. Paused navigation is excluded; resuming adds the current page as context. **Move** switches the control bar between lower corners.
+- **Stop & review** saves and opens that exact session. Clicks on the recorder's own controls are excluded from captured steps.
+- Review plain-language actions and input values. Add **Pass / Fail / Blocked**, expected results, and actual results/notes for each step; click **Save review**. The session can be renamed in the review screen.
+- **Download QA report** creates a Markdown reproduction report. **Technical details & export options** contains JSON export (including screenshots), selector editing, and deletion.
+- Older recordings remain compatible. The report contains text only; attach the JSON separately when screenshot evidence is needed. Unsaved review changes are guarded when switching steps or sessions.
+
+## Update an already loaded extension
+
+In `chrome://extensions`, click **Reload** on UI Flow Recorder. Refresh the test website and any existing viewer tab so they load the new scripts. This is required after rebuilding an unpacked extension; it does not delete saved sessions. Finish any active recording before reloading.
+
 ## Five-minute demo
 
 1. Run `npm run demo` and open http://127.0.0.1:4173.
 2. Open the extension popup and click **Start Recording**. The initial navigation is recorded.
 3. Enter a fictional name and leave the field, choose a color, toggle Gift wrap, and click Add to cart.
 4. Click Checkout (SPA navigation), then Finish and navigate (full-page navigation).
-5. Open the popup and **Stop Recording**, then **Open Viewer**. Refresh an already-open viewer to load new recordings.
+5. Click **Stop & review** on the floating recording bar. Refresh an already-open viewer to load new recordings.
 6. Select steps, inspect screenshots/selectors, choose an alternative selector and Save Changes. Play, pause, and resume the slideshow.
 7. Export JSON, import it as a separate copy, and reload the viewer to demonstrate persistence. Delete a copy after confirming.
 

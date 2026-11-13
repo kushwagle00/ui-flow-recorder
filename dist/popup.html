@@ -2,34 +2,48 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <title>UI Flow Recorder</title>
+    <title>QA Flow Recorder</title>
     <link rel="stylesheet" href="popup.css" />
   </head>
   <body>
-    <div class="container">
-      <h1>UI Flow Recorder</h1>
-      
-      <div id="status">
-        <span>Status:&nbsp;</span>
-        <span id="statusText" role="status">Idle</span>
-      </div>
-      
+    <main class="container">
+      <p class="eyebrow">MANUAL QA ASSISTANT</p>
+      <h1>Capture a test journey</h1>
+      <p class="intro">
+        Record your actions, then review the evidence and document what
+        happened.
+      </p>
+      <section id="status">
+        <span class="dot" aria-hidden="true"></span>
+        <div>
+          <strong id="statusText" role="status">Checking recorder…</strong
+          ><small id="statusHint">One browser tab per session.</small>
+        </div>
+      </section>
+      <label for="sessionName">Test / session name</label
+      ><input
+        id="sessionName"
+        maxlength="120"
+        placeholder="e.g. Checkout — guest user"
+        autocomplete="off"
+      />
       <div id="runInfo">
-        <strong>Run:</strong> <span id="runId">—</span>
-        <br />
-        <strong>Steps:</strong> <span id="stepCount">0</span>
+        <strong id="stepCount">0</strong> steps captured
+        <span id="runId" hidden></span>
       </div>
-
       <div class="actions">
-        <button id="startBtn">▶ Start Recording</button>
-        <button id="stopBtn" disabled>⏹ Stop Recording</button>
-        <button id="openViewerBtn">👁 Open Viewer</button>
+        <button id="startBtn" disabled>Start recording this tab</button
+        ><button id="pauseBtn" hidden>Pause recording</button
+        ><button id="stopBtn" disabled hidden>Stop & review session</button
+        ><button id="focusBtn" hidden>Go to recording tab</button
+        ><button id="openViewerBtn">Review saved sessions</button>
       </div>
-
-      <small class="hint">Captures clicks, form inputs, navigation, and screenshots</small>
-    </div>
-
-    <!-- IMPORTANT: external file, no inline JS -->
+      <p class="hint">
+        A recording bar stays on your page. Pause for setup or private
+        information. Stop when your test journey is complete.
+      </p>
+      <p id="error" role="alert" hidden></p>
+    </main>
     <script src="popup.js"></script>
   </body>
 </html>
